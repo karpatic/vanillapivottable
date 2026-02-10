@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple VanillaPivotTable Example</title>
+    <link rel="stylesheet" type="text/css" href="https://pivottable.js.org/dist/pivot.css">
+</head>
+<body>
+    <h1>Simple VanillaPivotTable Example</h1>
+    <div id="output"></div>
+
+    <script>
+        // Load the sortable.js script
+        const sortableScript = document.createElement("script");
+        sortableScript.src = "https://carlos-a-diez.com/vanillapivottable/sortable.js";
+        document.head.appendChild(sortableScript);
+
+        // Load the script for VanillaPivotTable after sortable.js
+        sortableScript.onload = () => {
+            const pivotTableScript = document.createElement("script");
+            pivotTableScript.src = "https://carlos-a-diez.com/vanillapivottable/pivottable.js";
+            pivotTableScript.onload = () => {
+                // Sample data
+                const data = [
+                    { Name: "Alice", Age: 25, City: "New York" },
+                    { Name: "Bob", Age: 30, City: "Paris" },
+                    { Name: "Charlie", Age: 35, City: "London" }
+                ];
+
+                // Initialize the pivot table
+                window.pivotUI(document.getElementById("output"), data, {
+                    rows: ["City"],
+                    cols: ["Age"],
+                    rendererName: "Table"
+                });
+            };
+            document.head.appendChild(pivotTableScript);
+        };
+    </script>
+</body>
+</html>
