@@ -1903,19 +1903,24 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
       });
     });
     if ('ontouchstart' in window) {
+      const mobileDndCleanupKey = "__pvtMobileDndCleanup";
+      if (typeof element[mobileDndCleanupKey] === "function") {
+        element[mobileDndCleanupKey]();
+      }
       let activeItem = null;
       let originContainer = null;
       let originIndex = -1;
       const placeholder = document.createElement("li");
       placeholder.className = "pvtPlaceholder";
       placeholder.style.visibility = "hidden";
-      const placePlaceholder = function(container, touchY) {
+
+      const placePlaceholder = function(container, clientY) {
         const items = Array.from(container.querySelectorAll("li")).filter(function(li) {
           return li !== activeItem && li !== placeholder;
         });
         const beforeItem = items.find(function(li) {
           const rect = li.getBoundingClientRect();
-          return touchY < rect.top + rect.height / 2;
+          return clientY < rect.top + rect.height / 2;
         });
         if (beforeItem) {
           container.insertBefore(placeholder, beforeItem);
@@ -1923,51 +1928,140 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
           container.appendChild(placeholder);
         }
       };
-      const onTouchMove = function(event) {
+
+      const findContainerFromPoint = function(clientX, clientY) {
+        const target = document.elementFromPoint(clientX, clientY);
+        return target ? target.closest(".pvtAxisContainer") : null;
+      };
+
+      const startDrag = function(item, clientY) {
+        activeItem = item;
+        originContainer = item.parentElement;
+        originIndex = Array.from(originContainer.querySelectorAll("li")).indexOf(item);
+        placeholder.style.height = item.offsetHeight + "px";
+        placePlaceholder(originContainer, clientY);
+      };
+
+      const moveDrag = function(clientX, clientY) {
         if (!activeItem) {
           return;
         }
-        event.preventDefault();
-        const touch = event.touches[0];
-        const target = document.elementFromPoint(touch.clientX, touch.clientY);
-        const container = target ? target.closest(".pvtAxisContainer") : null;
+        const container = findContainerFromPoint(clientX, clientY);
         if (!container) {
           return;
         }
-        placePlaceholder(container, touch.clientY);
+        placePlaceholder(container, clientY);
       };
-      const onTouchEnd = function() {
+
+      const endDrag = function() {
         if (!activeItem) {
           return;
         }
-        const destinationContainer = placeholder.parentElement;
-        if (destinationContainer) {
+        const destinationContainer = placeholder.parentElement || originContainer;
+        if (placeholder.parentElement === destinationContainer) {
           destinationContainer.insertBefore(activeItem, placeholder);
+        } else {
+          destinationContainer.appendChild(activeItem);
         }
         placeholder.remove();
-        if (destinationContainer && (destinationContainer !== originContainer || Array.from(destinationContainer.querySelectorAll("li")).indexOf(activeItem) !== originIndex)) {
+        if (destinationContainer !== originContainer || Array.from(destinationContainer.querySelectorAll("li")).indexOf(activeItem) !== originIndex) {
           refresh();
         }
         activeItem = null;
         originContainer = null;
         originIndex = -1;
       };
-      axisContainers.forEach(function(sortableContainer) {
-        sortableContainer.addEventListener("touchstart", function(event) {
+
+      const resetDragState = function() {
+        if (!activeItem) {
+          return;
+        }
+        placeholder.remove();
+        activeItem = null;
+        originContainer = null;
+        originIndex = -1;
+      };
+
+      if (window.PointerEvent) {
+        let activePointerId = null;
+        const onPointerDown = function(event) {
+          if (event.pointerType === "mouse") {
+            return;
+          }
+          const sortableContainer = event.currentTarget;
+          resetDragState();
           const item = event.target.closest("li");
           if (!item || !sortableContainer.contains(item)) {
             return;
           }
-          activeItem = item;
-          originContainer = item.parentElement;
-          originIndex = Array.from(originContainer.querySelectorAll("li")).indexOf(item);
-          placeholder.style.height = item.offsetHeight + "px";
-          placePlaceholder(originContainer, event.touches[0].clientY);
-        }, { passive: true });
-      });
-      document.addEventListener("touchmove", onTouchMove, { passive: false });
-      document.addEventListener("touchend", onTouchEnd);
-      document.addEventListener("touchcancel", onTouchEnd);
+          activePointerId = event.pointerId;
+          startDrag(item, event.clientY);
+          event.preventDefault();
+        };
+        const onPointerMove = function(event) {
+          if (!activeItem || event.pointerId !== activePointerId) {
+            return;
+          }
+          event.preventDefault();
+          moveDrag(event.clientX, event.clientY);
+        };
+        const onPointerEnd = function(event) {
+          if (!activeItem || event.pointerId !== activePointerId) {
+            return;
+          }
+          endDrag();
+          activePointerId = null;
+        };
+        axisContainers.forEach(function(sortableContainer) {
+          sortableContainer.addEventListener("pointerdown", onPointerDown);
+        });
+        document.addEventListener("pointermove", onPointerMove, { passive: false });
+        document.addEventListener("pointerup", onPointerEnd);
+        document.addEventListener("pointercancel", onPointerEnd);
+        element[mobileDndCleanupKey] = function() {
+          axisContainers.forEach(function(sortableContainer) {
+            sortableContainer.removeEventListener("pointerdown", onPointerDown);
+          });
+          document.removeEventListener("pointermove", onPointerMove);
+          document.removeEventListener("pointerup", onPointerEnd);
+          document.removeEventListener("pointercancel", onPointerEnd);
+          resetDragState();
+          activePointerId = null;
+        };
+      } else {
+        const onTouchStart = function(event) {
+          const sortableContainer = event.currentTarget;
+          resetDragState();
+          const item = event.target.closest("li");
+          if (!item || !sortableContainer.contains(item)) {
+            return;
+          }
+          startDrag(item, event.touches[0].clientY);
+        };
+        const onTouchMove = function(event) {
+          if (!activeItem) {
+            return;
+          }
+          event.preventDefault();
+          const touch = event.touches[0];
+          moveDrag(touch.clientX, touch.clientY);
+        };
+        axisContainers.forEach(function(sortableContainer) {
+          sortableContainer.addEventListener("touchstart", onTouchStart, { passive: true });
+        });
+        document.addEventListener("touchmove", onTouchMove, { passive: false });
+        document.addEventListener("touchend", endDrag);
+        document.addEventListener("touchcancel", endDrag);
+        element[mobileDndCleanupKey] = function() {
+          axisContainers.forEach(function(sortableContainer) {
+            sortableContainer.removeEventListener("touchstart", onTouchStart);
+          });
+          document.removeEventListener("touchmove", onTouchMove);
+          document.removeEventListener("touchend", endDrag);
+          document.removeEventListener("touchcancel", endDrag);
+          resetDragState();
+        };
+      }
     }
     
   }
