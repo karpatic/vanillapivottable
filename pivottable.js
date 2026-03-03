@@ -1892,19 +1892,83 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
     refresh(); 
     
     // Initialize HTML5Sortable on .pvtAxisContainer elements
-    sortable(element.querySelectorAll(".pvtAxisContainer"), {
+    const axisContainers = element.querySelectorAll(".pvtAxisContainer");
+    sortable(axisContainers, {
       items: 'li',
       placeholder: 'pvtPlaceholder',
       acceptFrom: '.pvtAxisContainer', // Allows items to be moved between any .pvtAxisContainer elements
     }).forEach(sortableContainer => {
       sortableContainer.addEventListener('sortupdate', function(e) { 
-        // Refresh or other logic when the order changes
         refresh(); 
-        if (e.detail.origin.container === e.detail.destination.container) {
-          refresh();
-        }
       });
     });
+    if ('ontouchstart' in window) {
+      let activeItem = null;
+      let originContainer = null;
+      let originIndex = -1;
+      const placeholder = document.createElement("li");
+      placeholder.className = "pvtPlaceholder";
+      placeholder.style.visibility = "hidden";
+      const placePlaceholder = function(container, touchY) {
+        const items = Array.from(container.querySelectorAll("li")).filter(function(li) {
+          return li !== activeItem && li !== placeholder;
+        });
+        const beforeItem = items.find(function(li) {
+          const rect = li.getBoundingClientRect();
+          return touchY < rect.top + rect.height / 2;
+        });
+        if (beforeItem) {
+          container.insertBefore(placeholder, beforeItem);
+        } else {
+          container.appendChild(placeholder);
+        }
+      };
+      const onTouchMove = function(event) {
+        if (!activeItem) {
+          return;
+        }
+        event.preventDefault();
+        const touch = event.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const container = target ? target.closest(".pvtAxisContainer") : null;
+        if (!container) {
+          return;
+        }
+        placePlaceholder(container, touch.clientY);
+      };
+      const onTouchEnd = function() {
+        if (!activeItem) {
+          return;
+        }
+        const destinationContainer = placeholder.parentElement;
+        if (destinationContainer) {
+          destinationContainer.insertBefore(activeItem, placeholder);
+        }
+        placeholder.remove();
+        if (destinationContainer && (destinationContainer !== originContainer || Array.from(destinationContainer.querySelectorAll("li")).indexOf(activeItem) !== originIndex)) {
+          refresh();
+        }
+        activeItem = null;
+        originContainer = null;
+        originIndex = -1;
+      };
+      axisContainers.forEach(function(sortableContainer) {
+        sortableContainer.addEventListener("touchstart", function(event) {
+          const item = event.target.closest("li");
+          if (!item || !sortableContainer.contains(item)) {
+            return;
+          }
+          activeItem = item;
+          originContainer = item.parentElement;
+          originIndex = Array.from(originContainer.querySelectorAll("li")).indexOf(item);
+          placeholder.style.height = item.offsetHeight + "px";
+          placePlaceholder(originContainer, event.touches[0].clientY);
+        }, { passive: true });
+      });
+      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      document.addEventListener("touchend", onTouchEnd);
+      document.addEventListener("touchcancel", onTouchEnd);
+    }
     
   }
   catch (error) { 
