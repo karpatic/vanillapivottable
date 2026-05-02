@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VanillaPivotTable Live QA Harness</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="https://pivottable.js.org/dist/pivot.css">
+  <style>
+    body {
+      margin: 0;
+      background: #f8fafc;
+      color: #172033;
+      font-family: Inter, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #dbe4ee;
+      border-radius: 22px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+      padding: 1.25rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .eyebrow {
+      margin: 0 0 0.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    pre {
+      margin: 0;
+      padding: 0.85rem;
+      border-radius: 14px;
+      background: #0f172a;
+      color: #dbeafe;
+      font-size: 0.82rem;
+      overflow: auto;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card" style="margin-bottom: 1rem;">
+      <p class="eyebrow">Live QA harness</p>
+      <h1 style="margin-top: 0;">Browser-oriented drag/drop check surface</h1>
+      <p>Use this page to manually verify the published interaction: drag by the <strong>::</strong> handle, move fields between zones, and confirm the mirror below always matches the visual layout.</p>
+      <p style="margin-bottom: 0;"><strong>Asset version:</strong> <span id="versionLabel">v20260502-dnd1</span></p>
+    </section>
+
+    <section class="grid">
+      <aside class="card">
+        <h2 style="margin-top: 0;">Checklist</h2>
+        <ol>
+          <li>Move a field from Available fields into Rows.</li>
+          <li>Move a field from Columns into Rows and confirm Columns updates immediately.</li>
+          <li>Move a field back to Available fields and confirm the drop hint returns when a zone becomes empty.</li>
+          <li>Open a field filter via the triangle and confirm it does not start dragging.</li>
+        </ol>
+        <h2>Observed state</h2>
+        <pre id="statePanel">Loading…</pre>
+      </aside>
+
+      <section class="card">
+        <div id="output"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const ASSET_VERSION = "20260502-dnd1";
+    document.getElementById("versionLabel").textContent = `v${ASSET_VERSION}`;
+
+    const statePanel = document.getElementById("statePanel");
+    const data = [
+      { Team: "Blue", Manager: "Alice", Region: "North", Quarter: "Q1", Product: "Desk", Channel: "Retail", Revenue: 12000 },
+      { Team: "Blue", Manager: "Alice", Region: "North", Quarter: "Q2", Product: "Lamp", Channel: "Retail", Revenue: 9100 },
+      { Team: "Blue", Manager: "Chris", Region: "West", Quarter: "Q3", Product: "Desk", Channel: "Online", Revenue: 15000 },
+      { Team: "Red", Manager: "Dana", Region: "South", Quarter: "Q1", Product: "Chair", Channel: "Retail", Revenue: 11800 },
+      { Team: "Red", Manager: "Dana", Region: "South", Quarter: "Q4", Product: "Lamp", Channel: "Online", Revenue: 8400 },
+      { Team: "Green", Manager: "Evan", Region: "West", Quarter: "Q2", Product: "Chair", Channel: "Wholesale", Revenue: 13200 },
+      { Team: "Green", Manager: "Fran", Region: "East", Quarter: "Q4", Product: "Desk", Channel: "Online", Revenue: 16600 }
+    ];
+
+    function reflect(options) {
+      statePanel.textContent = JSON.stringify({
+        rows: options.rows,
+        cols: options.cols,
+        vals: options.vals,
+        rendererName: options.rendererName,
+        aggregatorName: options.aggregatorName
+      }, null, 2);
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const localStyle = document.createElement("link");
+    localStyle.rel = "stylesheet";
+    localStyle.href = `../vanillapivottable.css?v=${ASSET_VERSION}`;
+    document.head.appendChild(localStyle);
+
+    Promise.resolve()
+      .then(() => loadScript("https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"))
+      .then(() => loadScript(`../sortable.js?v=${ASSET_VERSION}`))
+      .then(() => loadScript(`../pivottable.js?v=${ASSET_VERSION}`))
+      .then(() => {
+        const output = document.getElementById("output");
+        window.pivotUI(output, data, {
+          rows: ["Team"],
+          cols: ["Quarter"],
+          vals: ["Revenue"],
+          aggregatorName: "Sum",
+          rendererName: "Table",
+          showUI: true,
+          onRefresh: reflect
+        });
+        reflect(JSON.parse(output.dataset.pivotUIOptions || "{}"));
+      })
+      .catch((error) => {
+        statePanel.textContent = `Failed to load QA harness: ${error.message}`;
+        console.error(error);
+      });
+  </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VanillaPivotTable Drag/Drop Regression</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="https://pivottable.js.org/dist/pivot.css">
+  <link rel="stylesheet" type="text/css" href="../vanillapivottable.css?v=20260502-dnd1">
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    .pass { color: #0a7f2e; }
+    .fail { color: #b42318; }
+    #output { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <h1>VanillaPivotTable Drag/Drop Regression</h1>
+  <p id="status">PENDING</p>
+  <pre id="results"></pre>
+  <div id="output"></div>
+
+  <script>
+    window.Sortable = {
+      instances: [],
+      create(container, opts) {
+        const instance = { container, opts };
+        container.__sortableInstance = instance;
+        this.instances.push(instance);
+        return instance;
+      }
+    };
+  </script>
+  <script src="../pivottable.js?v=20260502-dnd1"></script>
+  <script>
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+    const output = document.getElementById('output');
+
+    function log(message) {
+      results.textContent += message + "\n";
+    }
+
+    function assert(condition, message) {
+      if (!condition) {
+        throw new Error(message);
+      }
+      log("✔ " + message);
+    }
+
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function options() {
+      return JSON.parse(output.dataset.pivotUIOptions || '{}');
+    }
+
+    function attrItem(name) {
+      const span = output.querySelector(`span.pvtAttr[data-attr-name="${name}"]`);
+      return span ? span.closest('li') : null;
+    }
+
+    function attrNames(containerSelector) {
+      return Array.from(output.querySelectorAll(`${containerSelector} li span.pvtAttr`)).map(node => node.dataset.attrName);
+    }
+
+    async function run() {
+      const data = [
+        { Name: 'Alice', Age: 25, City: 'New York', Team: 'Blue' },
+        { Name: 'Bob', Age: 30, City: 'Paris', Team: 'Red' },
+        { Name: 'Charlie', Age: 35, City: 'London', Team: 'Blue' }
+      ];
+
+      window.pivotUI(output, data, {
+        rows: ['City'],
+        cols: ['Age'],
+        rendererName: 'Table',
+        showUI: true
+      });
+
+      await wait(50);
+
+      assert(window.Sortable.instances.length >= 3, 'registers sortable handlers for pivot axis containers');
+      assert(JSON.stringify(options().rows) === JSON.stringify(['City']), 'starts with City in rows');
+      assert(JSON.stringify(options().cols) === JSON.stringify(['Age']), 'starts with Age in cols');
+
+      const rows = output.querySelector('.pvtRows .pvtAxisList');
+      const cols = output.querySelector('.pvtCols .pvtAxisList');
+      const unused = output.querySelector('.pvtUnused .pvtAxisList');
+      const nameItem = attrItem('Name');
+      const ageItem = attrItem('Age');
+
+      assert(rows && cols && unused, 'finds rows, cols, and unused axis lists');
+      assert(nameItem && ageItem, 'finds draggable attribute items');
+
+      rows.appendChild(nameItem);
+      rows.__sortableInstance.opts.onEnd({ item: nameItem, to: rows, from: unused });
+      await wait(50);
+      assert(JSON.stringify(options().rows) === JSON.stringify(['City', 'Name']), 'moving Name into rows updates pivotUI row state');
+
+      rows.insertBefore(nameItem, rows.firstElementChild);
+      rows.__sortableInstance.opts.onEnd({ item: nameItem, to: rows, from: rows });
+      await wait(50);
+      assert(JSON.stringify(options().rows) === JSON.stringify(['Name', 'City']), 'reordering within rows preserves drag order');
+
+      rows.appendChild(ageItem);
+      rows.__sortableInstance.opts.onEnd({ item: ageItem, to: rows, from: cols });
+      await wait(50);
+      assert(JSON.stringify(options().rows) === JSON.stringify(['Name', 'City', 'Age']), 'moving Age from cols into rows appends it to row state');
+      assert(JSON.stringify(options().cols) === JSON.stringify([]), 'moving Age out of cols clears col state');
+
+      status.textContent = 'PASS';
+      status.className = 'pass';
+      document.body.dataset.testStatus = 'pass';
+      log('PASS');
+    }
+
+    run().catch((error) => {
+      status.textContent = 'FAIL';
+      status.className = 'fail';
+      document.body.dataset.testStatus = 'fail';
+      log('FAIL: ' + error.message);
+      console.error(error);
+    });
+  </script>
+</body>
+</html>

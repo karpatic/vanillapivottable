@@ -27,6 +27,53 @@ function isObject(item) {
   return (item && typeof item === 'object' && !Array.isArray(item));
 }
 
+function isElementVisible(element) {
+  return !!(element && (element.offsetWidth || element.offsetHeight || element.getClientRects().length));
+}
+
+function parseFilterDataset(value) {
+  if (!value) {
+    return [null, null];
+  }
+  try {
+    var parsed = JSON.parse(value);
+    if (Array.isArray(parsed) && parsed.length >= 2) {
+      return [parsed[0], parsed[1]];
+    }
+  } catch (error) {}
+  return String(value).split(',');
+}
+
+function createAxisList(classNames, emptyText) {
+  var axisList = document.createElement('ul');
+  axisList.classList.add('pvtAxisList');
+  classNames.forEach(function(className) {
+    axisList.classList.add(className);
+  });
+  if (emptyText) {
+    axisList.dataset.emptyText = emptyText;
+  }
+  syncAxisListState(axisList);
+  return axisList;
+}
+
+function syncAxisListState(axisList) {
+  if (!axisList) {
+    return;
+  }
+  if (axisList.querySelector('li')) {
+    axisList.classList.remove('pvtAxisListEmpty');
+  } else {
+    axisList.classList.add('pvtAxisListEmpty');
+  }
+}
+
+function syncAxisListStates(axisLists) {
+  axisLists.forEach(function(axisList) {
+    syncAxisListState(axisList);
+  });
+}
+
 var PivotData, addSeparators, aggregatorTemplates, aggregators, dayNamesEn, derivers, getSort, locales, mthNamesEn, naturalSort, numberFormat, pivotTableRenderer, rd, renderers, rx, rz, sortAs, usFmt, usFmtInt, usFmtPct, zeroPad;
 addSeparators = function(nStr, thousandsSep, decimalSep) {
   var rgx, x, x1, x2;
@@ -950,7 +997,6 @@ window.pivotUtilities = {
 Default Renderer for hierarchical table layout
   */
 pivotTableRenderer = function(pivotData, opts) {
-  console.log('pivotTableRender', {pivotData, opts})
   var aggregator, c, colAttrs, colKey, colKeys, defaults, getClickHandler, i, j, r, result, rowAttrs, rowKey, rowKeys, spanSize, tbody, td, th, thead, totalAggregator, tr, txt, val, x;
   defaults = {
     table: {
@@ -1225,8 +1271,7 @@ window.pivot = (element, input, options, locale) => {
 Pivot Table UI: calls Pivot Table core above with options set by user
   */
 window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
-  console.log('pivotui', {element, input, inputOpts, overwrite, locale})
-  var a, aggregator, attr, attrLength, attrValues, c, colOrderArrow, defaults, e, existingOpts, fn1, i, initialRender, l, len1, len2, len3, localeDefaults, localeStrings, materializedInput, n, o, opts, ordering, pivotTable, recordsProcessed, ref, ref1, ref2, ref3, refresh, refreshDelayed, renderer, rendererControl, rowOrderArrow, shownAttributes, shownInAggregators, shownInDragDrop, tr1, tr2, uiTable, unused, unusedAttrsVerticalAutoCutoff, unusedAttrsVerticalAutoOverride, x;
+  var a, aggregator, attr, attrLength, attrValues, axisLists, c, colOrderArrow, colsAxisList, colsCell, defaults, e, existingOpts, fn1, i, initialRender, l, len1, len2, len3, localeDefaults, localeStrings, materializedInput, n, o, opts, ordering, pivotTable, recordsProcessed, ref, ref1, ref2, ref3, refresh, refreshDelayed, refreshTimer, renderer, rendererControl, rowOrderArrow, rowsAxisList, rowsCell, shownAttributes, shownInAggregators, shownInDragDrop, tr1, tr2, uiTable, unused, unusedAxisList, unusedAttrsVerticalAutoCutoff, unusedAttrsVerticalAutoOverride, x;
   if (overwrite == null) {    overwrite = false;  }
   if (locale == null) {    locale = "en";  }
   if (locales[locale] == null) {    locale = "en";  }
@@ -1264,11 +1309,15 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
   }; 
 
   // Merge passed in optionswith or the existing options if stored in the element data attribute to defaults
-  existingOpts = element.dataset?.pivotUIOptions || null;
-  if ((existingOpts == null) || overwrite) { 
-    opts = deepMerge({}, localeDefaults, deepMerge({}, defaults, inputOpts));
-  } 
-  else {    opts = existingOpts;  }
+  existingOpts = null;
+  if (!overwrite && element.dataset?.pivotUIOptions) {
+    try {
+      existingOpts = JSON.parse(element.dataset.pivotUIOptions);
+    } catch (error) {
+      existingOpts = null;
+    }
+  }
+  opts = deepMerge({}, localeDefaults, defaults, existingOpts || {}, inputOpts || {});
 
   try {
     attrValues = {};
@@ -1305,18 +1354,19 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
     
     rendererControl = document.createElement('td');
     rendererControl.classList.add('pvtUiCell');
+    var rendererShell = document.createElement('div');
+    rendererShell.classList.add('pvtControlStack');
+    var rendererLabel = document.createElement('div');
+    rendererLabel.classList.add('pvtControlLabel');
+    rendererLabel.textContent = 'Renderer';
     renderer = document.createElement('select');
     renderer.classList.add('pvtRenderer');
-    let rendererID = 'id_' + Math.random().toString(36).substr(2, 9); // Generate a unique ID
-    renderer.id = rendererID; // Assign the unique ID to the select element
-    rendererControl.appendChild(renderer); 
-    setTimeout(function(){
-      renderer = document.getElementById(rendererID); // Use the unique ID to get the select element
-      renderer.addEventListener('change', (e) => {
-          console.log(renderer.value);
-          return refresh();
-      });
-    }, 250);
+    renderer.addEventListener('change', function() {
+      return refresh();
+    });
+    rendererShell.appendChild(rendererLabel);
+    rendererShell.appendChild(renderer);
+    rendererControl.appendChild(rendererShell);
     
     ref = opts.renderers;
     for (x in ref) {
@@ -1329,6 +1379,15 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
 
     unused = document.createElement('td');
     unused.classList.add('pvtAxisContainer', 'pvtUnused', 'pvtUiCell');
+    var unusedAxisShell = document.createElement('div');
+    unusedAxisShell.classList.add('pvtAxisShell');
+    var unusedAxisLabel = document.createElement('div');
+    unusedAxisLabel.classList.add('pvtAxisLabel');
+    unusedAxisLabel.textContent = 'Available fields';
+    unusedAxisList = createAxisList(['pvtUnusedList'], 'Drag fields into rows or columns');
+    unusedAxisShell.appendChild(unusedAxisLabel);
+    unusedAxisShell.appendChild(unusedAxisList);
+    unused.appendChild(unusedAxisShell);
 
     shownAttributes = (function() {
       var results;
@@ -1435,13 +1494,14 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
             } : function(v) {
               return v.toLowerCase().indexOf(filter) !== -1;
             };
-            return valueList.find('.pvtCheckContainer p label span.value').each(function() {
-              if (accept(this.textContent)) {
-                return this.parentElement.parentElement.style.display = 'block';
+            valueList.querySelectorAll('.pvtCheckContainer p label span.value').forEach(function(node) {
+              if (accept(node.textContent)) {
+                node.parentElement.parentElement.style.display = 'block';
               } else {
-                return this.parentElement.parentElement.style.display = 'none';
+                node.parentElement.parentElement.style.display = 'none';
               }
             });
+            return;
           };
           let controls = valueList.appendChild(document.createElement('p'));
           sorter = getSort(opts.sorters, attr);
@@ -1457,9 +1517,11 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
           selectAllButton.type = 'button';
           selectAllButton.innerHTML = opts.localeStrings.selectAll;
           selectAllButton.addEventListener('click', function() {
-              valueList.querySelectorAll('input:visible:not(:checked)').forEach(input => {
-                  input.checked = true;
-                  input.classList.toggle('changed');
+              valueList.querySelectorAll('input').forEach(input => {
+                  if (input.type === 'checkbox' && !input.checked && isElementVisible(input)) {
+                      input.checked = true;
+                      input.classList.add('changed');
+                  }
               });
               return false;
           });
@@ -1469,9 +1531,11 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
           selectNoneButton.type = 'button';
           selectNoneButton.innerHTML = opts.localeStrings.selectNone;
           selectNoneButton.addEventListener('click', function() {
-              valueList.querySelectorAll('input:visible:checked').forEach(input => {
-                  input.checked = false;
-                  input.classList.toggle('changed');
+              valueList.querySelectorAll('input').forEach(input => {
+                  if (input.type === 'checkbox' && input.checked && isElementVisible(input)) {
+                      input.checked = false;
+                      input.classList.add('changed');
+                  }
               });
               return false;
           });
@@ -1524,14 +1588,22 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
         }
       }        
       closeFilterBox = function() {
-        if (valueList.find("[type='checkbox']").length > valueList.find("[type='checkbox']:checked").length) {
-          attrElem.addClass("pvtFilteredAttribute");
+        var checkboxes = valueList.querySelectorAll("input[type='checkbox']");
+        var checkedBoxes = valueList.querySelectorAll("input[type='checkbox']:checked");
+        if (checkboxes.length > checkedBoxes.length) {
+          attrElem.classList.add("pvtFilteredAttribute");
         } else {
-          attrElem.removeClass("pvtFilteredAttribute");
+          attrElem.classList.remove("pvtFilteredAttribute");
         }
-        valueList.find('.pvtSearch').val('');
-        valueList.find('.pvtCheckContainer p').show();
-        return valueList.hide();
+        var searchInput = valueList.querySelector('.pvtSearch');
+        if (searchInput) {
+          searchInput.value = '';
+        }
+        valueList.querySelectorAll('.pvtCheckContainer p').forEach(function(node) {
+          node.style.display = 'block';
+        });
+        valueList.style.display = 'none';
+        return valueList;
       };
       finalButtons = document.createElement('p');
       valueList.appendChild(finalButtons);
@@ -1583,6 +1655,7 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
 
       // Bind click event
       triangleLink.addEventListener('click', function(e) {
+          e.stopPropagation();
           // Get the position of the clicked element
           var rect = e.currentTarget.getBoundingClientRect();
           var left = rect.left + window.scrollX;
@@ -1599,19 +1672,26 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
       attrElem.classList.add('axis_' + i);
       const span = document.createElement('span');
       span.classList.add('pvtAttr');
-      span.textContent = attr;
       span.dataset.attrName = attr;
+      const dragHandle = document.createElement('span');
+      dragHandle.classList.add('pvtDragHandle');
+      dragHandle.textContent = '::';
+      const attrLabel = document.createElement('span');
+      attrLabel.classList.add('pvtAttrText');
+      attrLabel.textContent = attr;
 
       // Assuming triangleLink is already a DOM element
+      span.appendChild(dragHandle);
+      span.appendChild(attrLabel);
       span.appendChild(triangleLink);
       attrElem.appendChild(span);
 
       if (hasExcludedItem) {
-        attrElem.addClass('pvtFilteredAttribute');
+        attrElem.classList.add('pvtFilteredAttribute');
       }
-      unused.appendChild(attrElem);
-      unused.appendChild(valueList);
-      return unused
+      unusedAxisList.appendChild(attrElem);
+      unusedAxisShell.appendChild(valueList);
+      return unusedAxisList
     };
     for (i in shownInDragDrop) {
       if (!hasProp.call(shownInDragDrop, i)) continue;
@@ -1623,16 +1703,9 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
 
     aggregator = document.createElement("select");
     aggregator.classList.add('pvtAggregator');
-    let aggregatorID = 'id_' + Math.random().toString(36).substr(2, 9); // Generate a unique ID
-    aggregator.id = aggregatorID; // Assign the unique ID to the select element
-    setTimeout(function(){
-      aggregator = document.getElementById(aggregatorID); // Use the unique ID to get the select element
-      aggregator.addEventListener('change', (e) => {
-          console.log(aggregator.value);
-          return refresh();
-      });
-    }, 250);
-
+    aggregator.addEventListener('change', function() {
+      return refresh();
+    });
 
     ref1 = opts.aggregators; 
     for (x in ref1) {
@@ -1686,24 +1759,49 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
 
     td = document.createElement('td');
     td.classList.add('pvtVals', 'pvtUiCell');
-    td.appendChild(aggregator);
-    td.appendChild(rowOrderArrow);
-    td.appendChild(colOrderArrow);
-    td.appendChild(document.createElement('br'));
+    var aggregatorShell = document.createElement('div');
+    aggregatorShell.classList.add('pvtControlStack');
+    var aggregatorLabel = document.createElement('div');
+    aggregatorLabel.classList.add('pvtControlLabel');
+    aggregatorLabel.textContent = 'Summarize';
+    aggregatorShell.appendChild(aggregatorLabel);
+    aggregatorShell.appendChild(aggregator);
+    aggregatorShell.appendChild(rowOrderArrow);
+    aggregatorShell.appendChild(colOrderArrow);
+    aggregatorShell.appendChild(document.createElement('br'));
+    td.appendChild(aggregatorShell);
     tr1.appendChild(td);
     
-    td = document.createElement('td');
-    td.classList.add('pvtAxisContainer','pvtHorizList','pvtCols','pvtUiCell')
-    tr1.appendChild(td);
+    colsCell = document.createElement('td');
+    colsCell.classList.add('pvtAxisContainer','pvtHorizList','pvtCols','pvtUiCell');
+    var colsAxisShell = document.createElement('div');
+    colsAxisShell.classList.add('pvtAxisShell');
+    var colsAxisLabel = document.createElement('div');
+    colsAxisLabel.classList.add('pvtAxisLabel');
+    colsAxisLabel.textContent = 'Columns';
+    colsAxisList = createAxisList(['pvtColsList'], 'Drop columns here');
+    colsAxisShell.appendChild(colsAxisLabel);
+    colsAxisShell.appendChild(colsAxisList);
+    colsCell.appendChild(colsAxisShell);
+    tr1.appendChild(colsCell);
     
     tr2 = document.createElement("tr");
     uiTable.appendChild(tr2);
     
-    var td = document.createElement("td");
-    td.classList.add('pvtAxisContainer', 'pvtRows', 'pvtUiCell');
-    td.setAttribute("valign", "top");
+    rowsCell = document.createElement("td");
+    rowsCell.classList.add('pvtAxisContainer', 'pvtRows', 'pvtUiCell', 'pvtVertList');
+    rowsCell.setAttribute("valign", "top");
+    var rowsAxisShell = document.createElement('div');
+    rowsAxisShell.classList.add('pvtAxisShell');
+    var rowsAxisLabel = document.createElement('div');
+    rowsAxisLabel.classList.add('pvtAxisLabel');
+    rowsAxisLabel.textContent = 'Rows';
+    rowsAxisList = createAxisList(['pvtRowsList'], 'Drop rows here');
+    rowsAxisShell.appendChild(rowsAxisLabel);
+    rowsAxisShell.appendChild(rowsAxisList);
+    rowsCell.appendChild(rowsAxisShell);
     
-    tr2.appendChild(td);
+    tr2.appendChild(rowsCell);
 
     var pivotTable = document.createElement("td");
     pivotTable.setAttribute("valign", "top");
@@ -1721,19 +1819,22 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
     }
   
     
-    element.innerHTML = uiTable.outerHTML;
+    element.innerHTML = "";
+    element.appendChild(uiTable);
+    axisLists = Array.from(element.querySelectorAll('.pvtAxisList'));
     ref2 = opts.cols;
     for (n = 0, len2 = ref2.length; n < len2; n++) {
       x = ref2[n]; 
       let axisElement = element.querySelector(".axis_" + shownInDragDrop.indexOf(x));
-      element.querySelector(".pvtCols").appendChild(axisElement);
+      element.querySelector(".pvtCols .pvtAxisList").appendChild(axisElement);
     }
     ref3 = opts.rows;
     for (o = 0, len3 = ref3.length; o < len3; o++) {
       x = ref3[o];
       let axisElement = element.querySelector(".axis_" + shownInDragDrop.indexOf(x));
-      element.querySelector(".pvtRows").appendChild(axisElement);
+      element.querySelector(".pvtRows .pvtAxisList").appendChild(axisElement);
     }
+    syncAxisListStates(axisLists);
     if (opts.aggregatorName != null) {
       element.querySelector(".pvtAggregator").value = opts.aggregatorName;
     }
@@ -1743,12 +1844,13 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
     }
     
     if (!opts.showUI) {
-        element.querySelector(".pvtUiCell").style.display = 'none';
+        element.querySelectorAll(".pvtUiCell").forEach(function(node) {
+          node.style.display = 'none';
+        });
     }
     initialRender = true;
     refreshDelayed = (function(element) {
       return function() {
-        console.log("REFRESH DELAYED", aggregator.value)
         var exclusions, inclusions, len4, newDropdown, numInputsToProcess, pivotUIOptions, pvtVals, ref4, ref5, subopts, t, u, unusedAttrsContainer, vals;
         subopts = {
           derivedAttributes: opts.derivedAttributes,
@@ -1815,7 +1917,7 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
         exclusions = {};
         
         element.querySelectorAll('input.pvtFilter:not(:checked)').forEach(function(elem) {
-          var filter = elem.getAttribute("data-filter").split(',');
+          var filter = parseFilterDataset(elem.getAttribute("data-filter"));
           if (exclusions[filter[0]] != null) {
             exclusions[filter[0]].push(filter[1]);
           } else {
@@ -1825,7 +1927,7 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
         
         inclusions = {}; 
         element.querySelectorAll('input.pvtFilter:checked').forEach(function(elem) { 
-          var filter = elem.getAttribute("data-filter").split(',');
+          var filter = parseFilterDataset(elem.getAttribute("data-filter"));
           if (exclusions[filter[0]] != null) {
             if (inclusions[filter[0]] != null) {
               inclusions[filter[0]].push(filter[1]);
@@ -1866,15 +1968,16 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
           aggregatorName: aggregator.value,
           rendererName: renderer.value
         });
-        pivotUIOptions = {}
         element.dataset.pivotUIOptions = JSON.stringify(pivotUIOptions);
         if (opts.autoSortUnusedAttrs) {
-          unusedAttrsContainer = element.find("td.pvtUnused.pvtAxisContainer");
-          let unusedAttrsContainer = element.querySelector('td.pvtUnused.pvtAxisContainer');
-          let listItems = Array.from(unusedAttrsContainer.querySelectorAll('li'));
-          listItems.sort(function(a, b) { return naturalSort(a.textContent, b.textContent); });
-          listItems.forEach(li => unusedAttrsContainer.appendChild(li));          
+          let unusedAttrsContainer = element.querySelector('.pvtUnused .pvtAxisList');
+          if (unusedAttrsContainer) {
+            let listItems = Array.from(unusedAttrsContainer.querySelectorAll('li'));
+            listItems.sort(function(a, b) { return naturalSort(a.textContent, b.textContent); });
+            listItems.forEach(function(li) { unusedAttrsContainer.appendChild(li); });
+          }
         }
+        syncAxisListStates(axisLists);
         
         pivotTable.style.opacity = 1;
         if (opts.onRefresh != null) {
@@ -1886,22 +1989,58 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
     refresh = (function(element) { 
       return function() {
         pivotTable.style.opacity = 0.5;
-        return setTimeout(refreshDelayed, 10);
+        syncAxisListStates(axisLists);
+        if (refreshTimer != null) {
+          clearTimeout(refreshTimer);
+        }
+        refreshTimer = setTimeout(function() {
+          refreshTimer = null;
+          refreshDelayed();
+        }, 20);
+        return refreshTimer;
       };
     })(element); 
     refresh(); 
     
-    // Initialize HTML5Sortable on .pvtAxisContainer elements
-    const axisContainers = element.querySelectorAll(".pvtAxisContainer");
-    sortable(axisContainers, {
-      items: 'li',
-      placeholder: 'pvtPlaceholder',
-      acceptFrom: '.pvtAxisContainer', // Allows items to be moved between any .pvtAxisContainer elements
-    }).forEach(sortableContainer => {
-      sortableContainer.addEventListener('sortupdate', function(e) { 
-        refresh(); 
+    var axisContainers = axisLists;
+    if (window.Sortable && typeof window.Sortable.create === 'function') {
+      axisContainers.forEach(function(container) {
+        window.Sortable.create(container, {
+          group: 'pvtAxis',
+          animation: 150,
+          draggable: 'li',
+          handle: '.pvtAttr',
+          filter: '.pvtTriangle',
+          preventOnFilter: false,
+          ghostClass: 'pvtPlaceholder',
+          chosenClass: 'pvtDragItemChosen',
+          dragClass: 'pvtDragItemDragging',
+          fallbackOnBody: true,
+          emptyInsertThreshold: 20,
+          swapThreshold: 0.65,
+          onStart: function() {
+            document.body.classList.add('pvtDragging');
+          },
+          onEnd: function() {
+            document.body.classList.remove('pvtDragging');
+            syncAxisListStates(axisLists);
+            refresh();
+          }
+        });
       });
-    });
+    } else if (typeof sortable === 'function') {
+      sortable(axisContainers, {
+        items: 'li',
+        placeholder: 'pvtPlaceholder',
+        acceptFrom: '.pvtAxisList'
+      }).forEach(function(sortableContainer) {
+        sortableContainer.addEventListener('sortupdate', function(e) {
+          syncAxisListStates(axisLists);
+          refresh();
+        });
+      });
+    }
+
     if ('ontouchstart' in window) {
       const mobileDndCleanupKey = "__pvtMobileDndCleanup";
       if (typeof element[mobileDndCleanupKey] === "function") {
@@ -1914,13 +2053,23 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
       placeholder.className = "pvtPlaceholder";
       placeholder.style.visibility = "hidden";
 
-      const placePlaceholder = function(container, clientY) {
+      const placePlaceholder = function(container, clientX, clientY) {
         const items = Array.from(container.querySelectorAll("li")).filter(function(li) {
           return li !== activeItem && li !== placeholder;
         });
+        const isVertical = container.classList.contains("pvtRowsList");
         const beforeItem = items.find(function(li) {
           const rect = li.getBoundingClientRect();
-          return clientY < rect.top + rect.height / 2;
+          if (isVertical) {
+            return clientY < rect.top + rect.height / 2;
+          }
+          if (clientY < rect.top) {
+            return true;
+          }
+          if (clientY > rect.bottom) {
+            return false;
+          }
+          return clientX < rect.left + rect.width / 2;
         });
         if (beforeItem) {
           container.insertBefore(placeholder, beforeItem);
@@ -1931,15 +2080,29 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
 
       const findContainerFromPoint = function(clientX, clientY) {
         const target = document.elementFromPoint(clientX, clientY);
-        return target ? target.closest(".pvtAxisContainer") : null;
+        return target ? target.closest(".pvtAxisList") : null;
       };
 
-      const startDrag = function(item, clientY) {
+      const resetDragState = function() {
+        if (activeItem) {
+          activeItem.classList.remove("pvtDragItemChosen");
+        }
+        document.body.classList.remove("pvtDragging");
+        placeholder.remove();
+        activeItem = null;
+        originContainer = null;
+        originIndex = -1;
+      };
+
+      const startDrag = function(item, clientX, clientY) {
         activeItem = item;
         originContainer = item.parentElement;
         originIndex = Array.from(originContainer.querySelectorAll("li")).indexOf(item);
         placeholder.style.height = item.offsetHeight + "px";
-        placePlaceholder(originContainer, clientY);
+        placeholder.style.width = item.offsetWidth + "px";
+        activeItem.classList.add("pvtDragItemChosen");
+        document.body.classList.add("pvtDragging");
+        placePlaceholder(originContainer, clientX, clientY);
       };
 
       const moveDrag = function(clientX, clientY) {
@@ -1950,7 +2113,7 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
         if (!container) {
           return;
         }
-        placePlaceholder(container, clientY);
+        placePlaceholder(container, clientX, clientY);
       };
 
       const endDrag = function() {
@@ -1958,34 +2121,19 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
           return;
         }
         const destinationContainer = placeholder.parentElement || originContainer;
-        if (placeholder.parentElement === destinationContainer) {
-          destinationContainer.insertBefore(activeItem, placeholder);
-        } else {
-          destinationContainer.appendChild(activeItem);
-        }
-        placeholder.remove();
-        if (destinationContainer !== originContainer || Array.from(destinationContainer.querySelectorAll("li")).indexOf(activeItem) !== originIndex) {
+        destinationContainer.insertBefore(activeItem, placeholder);
+        const didMove = destinationContainer !== originContainer || Array.from(destinationContainer.querySelectorAll("li")).indexOf(activeItem) !== originIndex;
+        resetDragState();
+        syncAxisListStates(axisLists);
+        if (didMove) {
           refresh();
         }
-        activeItem = null;
-        originContainer = null;
-        originIndex = -1;
-      };
-
-      const resetDragState = function() {
-        if (!activeItem) {
-          return;
-        }
-        placeholder.remove();
-        activeItem = null;
-        originContainer = null;
-        originIndex = -1;
       };
 
       if (window.PointerEvent) {
         let activePointerId = null;
         const onPointerDown = function(event) {
-          if (event.pointerType === "mouse") {
+          if (event.pointerType === "mouse" || event.target.closest(".pvtTriangle")) {
             return;
           }
           const sortableContainer = event.currentTarget;
@@ -1995,7 +2143,7 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
             return;
           }
           activePointerId = event.pointerId;
-          startDrag(item, event.clientY);
+          startDrag(item, event.clientX, event.clientY);
           event.preventDefault();
         };
         const onPointerMove = function(event) {
@@ -2030,13 +2178,16 @@ window.pivotUI = (element, input, inputOpts, overwrite, locale) => {
         };
       } else {
         const onTouchStart = function(event) {
+          if (event.target.closest(".pvtTriangle")) {
+            return;
+          }
           const sortableContainer = event.currentTarget;
           resetDragState();
           const item = event.target.closest("li");
           if (!item || !sortableContainer.contains(item)) {
             return;
           }
-          startDrag(item, event.touches[0].clientY);
+          startDrag(item, event.touches[0].clientX, event.touches[0].clientY);
         };
         const onTouchMove = function(event) {
           if (!activeItem) {

@@ -1,0 +1,108 @@
+.pvtUi .pvtUiCell {
+  vertical-align: top;
+}
+
+.pvtControlStack,
+.pvtAxisShell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pvtControlLabel,
+.pvtAxisLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #55606d;
+}
+
+.pvtAxisContainer,
+.pvtVals {
+  border-radius: 14px;
+  border-color: #c8d0da;
+  background: #eef2f7;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.pvtAxisList {
+  margin: 0;
+  padding: 0.55rem;
+  min-height: 3.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.6rem;
+  border: 1px dashed transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pvtRows .pvtAxisList {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.pvtAxisList.pvtAxisListEmpty {
+  border-color: #b6c2cf;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.pvtAxisList.pvtAxisListEmpty::before {
+  content: attr(data-empty-text);
+  font-size: 0.85rem;
+  color: #738091;
+}
+
+.pvtDragging .pvtAxisList,
+.pvtAxisList:hover {
+  border-color: #6ea8fe;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.pvtAxisContainer li {
+  margin: 0;
+  padding: 0;
+}
+
+.pvtAxisContainer li span.pvtAttr {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid #d5dce4;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.pvtDragHandle {
+  cursor: grab;
+  color: #7c8794;
+  font-weight: 700;
+  letter-spacing: -0.08em;
+  user-select: none;
+}
+
+.pvtDragItemDragging .pvtDragHandle,
+.pvtDragItemChosen .pvtDragHandle,
+.pvtDragHandle:active {
+  cursor: grabbing;
+}
+
+.pvtAttrText {
+  font-weight: 600;
+}
+
+.pvtTriangle {
+  margin-left: 0.15rem;
+}
+
+.pvtAxisContainer li.pvtPlaceholder {
+  min-width: 9rem;
+  min-height: 2.5rem;
+  border: 1px dashed #6ea8fe;
+  background: rgba(110, 168, 254, 0.12);
+}

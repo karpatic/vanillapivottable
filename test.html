@@ -3,40 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple VanillaPivotTable Example</title>
+    <title>VanillaPivotTable Live Drag Demo</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="https://pivottable.js.org/dist/pivot.css">
+    <style>
+        body {
+            margin: 0;
+            background: #f8fafc;
+            color: #172033;
+            font-family: Inter, "Segoe UI", sans-serif;
+        }
+
+        .page {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem 3rem;
+        }
+
+        .hero,
+        .panel,
+        .table-shell {
+            background: #fff;
+            border: 1px solid #dbe4ee;
+            border-radius: 22px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .hero {
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .panel {
+            padding: 1rem 1.1rem;
+            height: 100%;
+        }
+
+        .table-shell {
+            padding: 1rem;
+            margin-top: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .eyebrow {
+            margin: 0 0 0.5rem;
+            color: #475569;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .hero h1 {
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+            font-size: clamp(2rem, 4vw, 3.25rem);
+        }
+
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            font-size: 1rem;
+        }
+
+        .panel p,
+        .panel li {
+            color: #475569;
+        }
+
+        pre {
+            margin: 0;
+            padding: 0.85rem;
+            border-radius: 14px;
+            background: #0f172a;
+            color: #dbeafe;
+            font-size: 0.82rem;
+            overflow: auto;
+        }
+
+        a {
+            color: #2563eb;
+        }
+    </style>
 </head>
 <body>
-    <h1>Simple VanillaPivotTable Example</h1>
-    <div id="output"></div>
+    <main class="page">
+        <section class="hero">
+            <p class="eyebrow">Live demo</p>
+            <h1>Drag fields with the handle and watch the pivot update live.</h1>
+            <p>This page uses the refreshed drag/drop surface shipped in <span id="versionLabel">v20260502-dnd1</span>. Use the <strong>::</strong> handle on each field pill, move fields between zones, and watch the live state mirror below.</p>
+            <div class="chip-row">
+                <span class="chip">Dedicated drag handles</span>
+                <span class="chip">Empty-zone drop hints</span>
+                <span class="chip">Debounced refresh path</span>
+            </div>
+        </section>
+
+        <section class="row g-4">
+            <div class="col-lg-5">
+                <div class="panel">
+                    <h2>How to test</h2>
+                    <ol class="mb-0">
+                        <li>Drag <strong>Salesperson</strong> or <strong>Product</strong> out of Available fields.</li>
+                        <li>Drop them into <strong>Rows</strong> or <strong>Columns</strong>.</li>
+                        <li>Open a field menu with the triangle and confirm filtering still works independently of dragging.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="panel">
+                    <h2>Live pivot state</h2>
+                    <pre id="statePanel">Loading…</pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="table-shell">
+            <div id="output"></div>
+        </section>
+    </main>
 
     <script>
-        // Load the sortable.js script
-        const sortableScript = document.createElement("script");
-        sortableScript.src = "https://carlos-a-diez.com/vanillapivottable/sortable.js";
-        document.head.appendChild(sortableScript);
+        const ASSET_VERSION = "20260502-dnd1";
+        const versionLabel = document.getElementById("versionLabel");
+        versionLabel.textContent = `v${ASSET_VERSION}`;
 
-        // Load the script for VanillaPivotTable after sortable.js
-        sortableScript.onload = () => {
-            const pivotTableScript = document.createElement("script");
-            pivotTableScript.src = "https://carlos-a-diez.com/vanillapivottable/pivottable.js";
-            pivotTableScript.onload = () => {
-                // Sample data
-                const data = [
-                    { Name: "Alice", Age: 25, City: "New York" },
-                    { Name: "Bob", Age: 30, City: "Paris" },
-                    { Name: "Charlie", Age: 35, City: "London" }
-                ];
+        const salesData = [
+            { Region: "North", City: "Boston", Quarter: "Q1", Product: "Desk", Salesperson: "Alice", Revenue: 12400, Units: 12 },
+            { Region: "North", City: "Boston", Quarter: "Q2", Product: "Desk", Salesperson: "Alice", Revenue: 13250, Units: 13 },
+            { Region: "North", City: "New York", Quarter: "Q2", Product: "Chair", Salesperson: "Bob", Revenue: 9650, Units: 18 },
+            { Region: "South", City: "Atlanta", Quarter: "Q1", Product: "Chair", Salesperson: "Dana", Revenue: 11200, Units: 17 },
+            { Region: "South", City: "Miami", Quarter: "Q3", Product: "Lamp", Salesperson: "Dana", Revenue: 7300, Units: 22 },
+            { Region: "West", City: "Denver", Quarter: "Q1", Product: "Desk", Salesperson: "Evan", Revenue: 10450, Units: 10 },
+            { Region: "West", City: "Seattle", Quarter: "Q4", Product: "Lamp", Salesperson: "Evan", Revenue: 8800, Units: 26 },
+            { Region: "West", City: "Seattle", Quarter: "Q4", Product: "Chair", Salesperson: "Fran", Revenue: 10100, Units: 19 }
+        ];
 
-                // Initialize the pivot table
-                window.pivotUI(document.getElementById("output"), data, {
-                    rows: ["City"],
-                    cols: ["Age"],
-                    rendererName: "Table"
-                });
-            };
-            document.head.appendChild(pivotTableScript);
-        };
+        const statePanel = document.getElementById("statePanel");
+
+        function updateState(options) {
+            statePanel.textContent = JSON.stringify({
+                rows: options.rows,
+                cols: options.cols,
+                vals: options.vals,
+                rendererName: options.rendererName,
+                aggregatorName: options.aggregatorName,
+                exclusions: options.exclusions
+            }, null, 2);
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        Promise.resolve()
+            .then(() => loadScript("https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"))
+            .then(() => loadScript(`./sortable.js?v=${ASSET_VERSION}`))
+            .then(() => loadScript(`./pivottable.js?v=${ASSET_VERSION}`))
+            .then(() => loadScript(`./renderer_pivottable.js?v=${ASSET_VERSION}`))
+            .then(() => {
+                const output = document.getElementById("output");
+                const initialOptions = {
+                    rows: ["Region"],
+                    cols: ["Quarter"],
+                    vals: ["Revenue"],
+                    aggregatorName: "Sum",
+                    rendererName: "Table",
+                    showUI: true,
+                    onRefresh: updateState
+                };
+                window.pivotUI(output, salesData, initialOptions);
+                updateState(JSON.parse(output.dataset.pivotUIOptions || "{}"));
+            })
+            .catch((error) => {
+                statePanel.textContent = `Failed to load demo: ${error.message}`;
+                console.error(error);
+            });
+    </script>
+    <script>
+        const style = document.createElement("link");
+        style.rel = "stylesheet";
+        style.href = `./vanillapivottable.css?v=${ASSET_VERSION}`;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
